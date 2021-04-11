@@ -50,8 +50,8 @@ data "template_file" "machine-configs" {
   for_each = toset(var.machines)
   template = file("${path.module}/machine-${each.key}.yaml")
 
-  vars = {
+  vars = merge(var.template_vars, {
     ssh_keys = jsonencode(var.ssh_keys)
     name     = each.key
-  }
+  })
 }

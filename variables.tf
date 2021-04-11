@@ -28,3 +28,11 @@ variable "flatcar_stable_version" {
   type        = string
   description = "The Flatcar Stable release you want to use for the initial installation, e.g., 2605.12.0"
 }
+
+variable "template_vars" {
+  type = map(string)
+  # default = {
+  #   "us-east-1" = "image-1234"
+  #   "us-west-2" = "image-4567"
+  # }
+}

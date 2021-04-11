@@ -1,13 +1,32 @@
 ---
+## Configure instances with:
+## - Nomad
+
+# Docs:
+# https://kinvolk.io/docs/flatcar-container-linux/latest/provisioning/cl-config/examples/
+# https://learn.hashicorp.com/tutorials/nomad/production-deployment-guide-vm-with-consul?in=nomad/production
+
+
 passwd:
   users:
     - name: core
       ssh_authorized_keys: ${ssh_keys}
+
+# Filesystem Mode Cheat Sheet
+# Owner/Group/World
+# 0 - no access to the file
+# 1 - execute only
+# 2 - write only
+# 3 - write and execute
+# 4 - read only
+# 5 - read and execute
+# 6 - read and write
+# 7 - read, write and execute (full permissions)
 storage:
   files:
     - path: /home/core/works
       filesystem: root
-      mode: 0755
+      mode: 0700 #u+rwx
       contents:
         inline: |
           #!/bin/bash
@@ -15,3 +34,74 @@ storage:
           # This script demonstrates how templating and variable substitution works when using Terraform templates for Container Linux Configs.
           hostname="$(hostname)"
           echo My name is ${name} and the hostname is $${hostname}
+
+    - path: /usr/local/bin/nomad
+      filesystem: root
+      contents:
+        remote:
+          url: https://releases.hashicorp.com/nomad/${nomad_version}/nomad_${nomad_version}_linux_amd64.zip
+          compression: zip
+          verification:
+            hash:
+              function: sha256
+              sum: ${nomad_sha256}
+      mode: 0700 #u+rwx
+
+    - path: /etc/nomad.d/nomad.hcl
+      filesystem: root
+      mode: 0600 #u+rw
+      contents:
+        #@todo does the state need to persist between reboots?
+        inline: |
+          datacenter = "dc1"
+          data_dir = "/opt/nomad"
+
+    - path: /etc/nomad.d/server.hcl
+      filesystem: root
+      mode: 0600 #u+rw
+      contents:
+        #@todo does the state need to persist between reboots?
+        inline: |
+          server {
+            # Specifies if this agent should run in server mode. All other server options depend on this value being set.
+            enabled = true
+            # The number of expected servers in the cluster. Either this value should not be provided or the value must agree with other servers in the cluster.
+            bootstrap_expect = 3
+          }
+    - path: /etc/nomad.d/client.hcl
+      filesystem: root
+      mode: 0600 #u+rw
+      contents:
+        #@todo does the state need to persist between reboots?
+        inline: |
+          client {
+            # Specifies if this agent should run in client mode. All other client options depend on this value being set.
+            enabled = true
+          }
+
+systemd:
+  units:
+    - name: nomad.service
+      enabled: true
+      contents: |
+        [Unit]
+        Description=Nomad
+        Documentation=https://www.nomadproject.io/docs
+        Wants=network-online.target
+        After=network-online.target
+
+        [Service]
+        ExecReload=/bin/kill -HUP $MAINPID
+        ExecStart=/usr/local/bin/nomad agent -config /etc/nomad.d
+        KillMode=process
+        KillSignal=SIGINT
+        LimitNOFILE=infinity
+        LimitNPROC=infinity
+        Restart=on-failure
+        RestartSec=2
+        StartLimitBurst=3
+        StartLimitIntervalSec=10
+        TasksMax=infinity
+
+        [Install]
+        WantedBy=multi-user.target
