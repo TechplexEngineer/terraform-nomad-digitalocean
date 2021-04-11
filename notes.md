@@ -1,0 +1,1 @@
+https://github.com/kinvolk/flatcar-terraform/tree/main/digitalocean
